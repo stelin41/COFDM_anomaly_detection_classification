@@ -2,3 +2,5 @@ dataset/Jamming/*
 dataset/Jamming.zip
 .DS_Store
 src/.env
+src/__pycache__/
+venv/
