@@ -1,0 +1,3 @@
+[submodule "dvbt_decoder"]
+	path = dvbt_decoder
+	url = https://github.com/joneskm/dvbt_decoder

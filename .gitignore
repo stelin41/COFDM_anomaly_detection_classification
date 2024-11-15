@@ -1,4 +1,5 @@
 dataset/Jamming/*
 dataset/Jamming.zip
 .DS_Store
-src/.env
+.env
+experiments

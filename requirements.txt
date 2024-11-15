@@ -1,0 +1,8 @@
+numpy
+scipy
+matplotlib
+ipywidgets
+
+future
+
+#streamlit
