@@ -3,6 +3,24 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
+def cache_data(func):
+    cache = {}
+
+    def wrapper(*args, **kwargs):
+        cache_key = str(args) + str(kwargs)
+        
+        if cache_key in cache:
+            print("Cargando datos desde cache...")
+            return cache[cache_key]
+        
+        result = func(*args, **kwargs)
+        cache[cache_key] = result
+        
+        return result
+
+    return wrapper
+
+@cache_data
 def load_data(input_directory:str, metadata:str) -> dict:
     metadata_pd = pd.read_csv(metadata, skip_blank_lines = True, header = 0)
     FileName = list(metadata_pd["FileName"])

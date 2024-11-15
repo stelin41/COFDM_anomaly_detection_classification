@@ -18,19 +18,21 @@ def signal_interval(signal: np.complex64, n_samples=50000, interv=1024) -> np.ar
         
     return fft_matrix
 
-def energy_arrays(fft_matrix: np.array) -> np.array: 
+def energy_arrays(fft_matrix: np.array, n_frec_div:int) -> np.array: 
     '''
-    Calcula el array de diferencias de energía de un intervalo (ventana)
-    con respecto al previo
+    Calcula la matriz de diferencias de energía de un intervalo (fila o ventana)
+    con respecto al previo repartido en n_frec_div bloques (columnas) 
     '''
     n_windows = fft_matrix.shape[0]
-    energy_dif = np.zeros(n_windows-1, dtype=np.float64)
-
-    energies = np.sum(np.abs(fft_matrix)**2, axis=1)
-    for i in range(1,n_windows):
-        energy_dif[i-1] = np.log(energies[i]/energies[i-1])
+    length_frec_div = fft_matrix.shape[1] // n_frec_div
+    energy_dif = np.zeros((n_windows-1, n_frec_div), dtype=np.float64)
+    
+    for i in range(n_frec_div):
+        energies = np.sum(np.abs(fft_matrix[:,i:i+length_frec_div])**2, axis=1)
+        for j in range(1,n_windows):
+            energy_dif[j-1,i] = np.log(energies[j]/energies[j-1])
         
-    return np.array(energy_dif)
+    return energy_dif
 
 def split_data(signal_list, train_ratio=0.8):
     random.shuffle(signal_list)
