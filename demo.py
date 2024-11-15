@@ -1,29 +1,27 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons
-
-
-
-
-
-from matplotlib.mlab import window_hanning,specgram
-import matplotlib.pyplot as plt
+from matplotlib.mlab import window_hanning,specgram,psd
 import matplotlib.animation as animation
 from matplotlib.colors import LogNorm
-import ipywidgets as widgets
 import numpy as np
 
+from scipy.fft import fftshift
+from scipy.signal import welch, spectrogram
+
+#from src.utils_exploration import plot_PSD
 #from src.rf_stream import 
 
 
-#SAMPLES_PER_FRAME = 10 #Number of mic reads concatenated within a single window
-SAMPLES_PER_FRAME = 100
-nfft = 1024#256#1024 #NFFT value for spectrogram
-overlap = 1000#512 #overlap value for spectrogram
+#SAMPLES_PER_FRAME = 10 
+SAMPLES_PER_FRAME = 100 #Number reads concatenated within a single window
+nfft = 1024 #NFFT value for spectrogram
+overlap = 1000 #overlap value for spectrogram
 #rate = mic_read.RATE #sampling rate
 
 
 Fs = 300 # sample rate
+Fc = 0 # cutoff frequency
 Ts = 1/Fs # sample period
 N = 2048 # number of samples to simulate
 rate = Fs
@@ -56,13 +54,27 @@ def get_specgram(signal,rate):
                                 Fs = rate,NFFT=nfft,noverlap=overlap)
     return arr2D,freqs,bins
 
+def calc_psd(signal,rate):
+    f, Pxx_spec = welch(signal, rate, nperseg=nfft, return_onesided=False, scaling="density")
+    Pxx_spec_dB = 10 * np.log10(Pxx_spec)
+    f = fftshift(f)
+    Pxx_spec_dB = fftshift(Pxx_spec_dB)
+        
+    return Pxx_spec_dB, (f + Fc) / 1e6
 
+
+# I think this is faster but it is not
+# in the correct scale
+def calc_psd2(signal,rate):
+    Pxx,freqs = psd(signal,window=window_hanning,
+                                Fs = rate,NFFT=nfft,noverlap=overlap)
+    return Pxx,freqs
 
 
 def main():
     #fig = plt.figure()
 
-    fig, (ax1, ax2) = plt.subplots(2)
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2)
     
     plt.subplots_adjust(left=0.25, bottom=0.25)
     t = np.arange(0.0, 1.0, 0.001)
@@ -70,8 +82,8 @@ def main():
     f0 = 3
     delta_f = 5.0
     s = a0 * np.sin(2 * np.pi * f0 * t)
-    l, = ax1.plot(t, s, lw=2)
-    ax1.axis([0, 1, -10, 10])
+    l, = ax4.plot(t, s, lw=2)
+    ax4.axis([0, 1, -10, 10])
 
     axcolor = 'lightgoldenrodyellow'
     axfreq = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
@@ -79,6 +91,9 @@ def main():
 
     sfreq = Slider(axfreq, 'Freq', 0.1, 30.0, valinit=freq, valstep=delta_f)
     samp = Slider(axamp, 'Amp', 0.1, 10.0, valinit=a0)
+
+
+    ###########
 
     def update(val):
         global freq
@@ -109,7 +124,8 @@ def main():
         fig.canvas.draw_idle()
     radio.on_clicked(colorfunc)
     
-
+    #########################
+    
     """
     Launch the stream and the original spectrogram
     """
@@ -121,13 +137,23 @@ def main():
     Setup the plot paramters
     """
     extent = (bins[0],bins[-1]*SAMPLES_PER_FRAME,freqs[-1],freqs[0])
-    im = ax2.imshow(arr2D,aspect='auto',extent = extent,interpolation="none",
+    im = ax1.imshow(arr2D,aspect='auto',extent = extent,interpolation="none",
                     cmap = 'jet',norm = LogNorm(vmin=.01,vmax=1))
-    #plt.xlabel('Time (s)')
-    #plt.ylabel('Frequency (Hz)')
-    #plt.title('Real Time Spectogram')
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel('Frequency (Hz)')
+    ax1.set_title('Real Time Spectogram')
     plt.gca().invert_yaxis()
-    ##plt.colorbar() #enable if you want to display a color bar
+    fig.colorbar(im)
+
+
+    #_, _, psd = ax3.psd(data,window=window_hanning,
+    #                            Fs = rate,NFFT=nfft,noverlap=overlap, return_line=True)
+    Pxx,freqs = calc_psd(data,rate)
+    psd_line, = ax3.plot(freqs,Pxx, '-')
+    ax3.set_xlabel("Frequency [MHz]")
+    ax3.set_ylabel("PSD [dB/Hz]")
+    ax3.set_title("PSD")
+    ax3.grid(True)
 
     def update_fig(n):
         """
@@ -138,6 +164,12 @@ def main():
         outputs: updated image
         """
         data = get_sample()
+        
+        Pxx,freqs = calc_psd(data,rate)
+
+        psd_line.set_data(freqs,Pxx)
+
+        
         arr2D,freqs,bins = get_specgram(data,rate)
         im_data = im.get_array()
         if n < SAMPLES_PER_FRAME:
@@ -153,8 +185,7 @@ def main():
     ############### Animate ###############
     anim = animation.FuncAnimation(fig,update_fig,blit = False,
                                 interval=1)
-
-                                
+    
     try:
         plt.show()
     except:
@@ -163,19 +194,8 @@ def main():
     ############### Terminate ###############
     #stream.stop_stream()
     #stream.close()
-    pa.terminate()
+    #pa.terminate()
     print("Program Terminated")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
