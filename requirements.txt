@@ -6,3 +6,5 @@ ipywidgets
 future
 
 #streamlit
+
+pandas
