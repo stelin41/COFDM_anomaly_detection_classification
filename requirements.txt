@@ -1,6 +1,8 @@
 numpy
 scipy
 matplotlib
+pandas
+scikit-learn
 
 tqdm
 
@@ -8,4 +10,3 @@ future
 
 #streamlit
 
-pandas

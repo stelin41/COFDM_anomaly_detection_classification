@@ -15,7 +15,7 @@ random.seed(1337)
 n_samples = 50000
 interv = 1024 # Hyperparameter 1
 array_length = (n_samples // interv) - 1
-n_frec_div = 8 # Hyperparameter 2
+n_frec_div = 16 # Hyperparameter 2
 
 # Load data
 signals_clean = load_data('../dataset/Jamming/Clean', '../dataset/Jamming/metadata.csv')
@@ -61,11 +61,7 @@ print(f"\nMapping clusters to predominant classes: {cluster_map}")
 
 test_energy_dif_matrix, y_true = compute_energy_matrix_and_labels(test, n_samples, interv, n_frec_div, class_mapping)
 
-# Flattened energy matrix
-_, _ , n_signals = test_energy_dif_matrix.shape
-flattened_test_matrix = test_energy_dif_matrix.reshape(array_length*n_signals, n_frec_div)
-
-y_pred = [cluster_map[label] for label in cluster.predict(flattened_test_matrix)]
+y_pred = [cluster_map[label] for label in cluster.predict(test_energy_dif_matrix)]
 # Nota: por el momento predice en exceso clase 1 (corregir desbalanceo, clase mayoritaria tiene muchas más ocurrencias)
 print(np.bincount(y_pred))
 

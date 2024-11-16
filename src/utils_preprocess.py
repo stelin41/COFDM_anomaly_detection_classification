@@ -36,11 +36,10 @@ def energy_arrays(fft_matrix: np.array, n_frec_div:int) -> np.array:
     energy_dif = np.zeros((n_windows-1, n_frec_div), dtype=np.float64)
     
     for i in range(n_frec_div):
-        energies = np.sum(np.abs(fft_matrix[:,i:i+length_frec_div])**2, axis=1)
-        for j in range(1,n_windows):
-            energy_dif[j-1,i] = np.log(energies[j]/energies[j-1])
+        energies = np.sum(np.abs(fft_matrix[:,i*length_frec_div:(i+1)*length_frec_div])**2, axis=1)
+        energy_dif[:,i] = np.log(energies[1:]/energies[:-1])
         
-    return energy_dif
+    return np.abs(energy_dif)
 
 def split_data(signal_list, train_ratio=0.8):
     '''
@@ -61,10 +60,10 @@ def compute_energy_matrix_and_labels(dataset:list, n_samples:int, interv:int, n_
     array_length = (n_samples // interv) - 1
     N = len(dataset)
     
-    energy_dif_matrix = np.zeros((array_length, n_frec_div, N), dtype=np.float64)
+    energy_dif_matrix = np.zeros((array_length*N, n_frec_div), dtype=np.float64)
     sample_labels = np.zeros(array_length*N, np.int8)
     for i, signal in tqdm(enumerate(dataset)):
-        energy_dif_matrix[:,:,i] = energy_arrays(signal_interval(signal["Data"], n_samples, interv), n_frec_div)
+        energy_dif_matrix[array_length*i:array_length*(i+1),:] = energy_arrays(signal_interval(signal["Data"], n_samples, interv), n_frec_div)
         sample_labels[i*array_length:(i*array_length)+array_length] = class_mapping[signal["Class"]]
         
     return energy_dif_matrix, sample_labels
