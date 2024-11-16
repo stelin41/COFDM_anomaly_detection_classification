@@ -1,6 +1,8 @@
 import numpy as np
 import random
 
+from tqdm import tqdm
+
 def signal_interval(signal: np.complex64, n_samples=50000, interv=1024) -> np.array:
     '''
     Calcula la matriz donde hay 48 ventanas (filas)
@@ -35,6 +37,9 @@ def energy_arrays(fft_matrix: np.array, n_frec_div:int) -> np.array:
     return energy_dif
 
 def split_data(signal_list, train_ratio=0.8):
+    '''
+    Splits a given dataset in train-test (random)
+    '''
     random.shuffle(signal_list)
     
     split_idx = int(len(signal_list) * train_ratio)
@@ -43,3 +48,18 @@ def split_data(signal_list, train_ratio=0.8):
     test_data = signal_list[split_idx:]
     
     return train_data, test_data
+
+def compute_energy_matrix_and_labels(dataset:list, n_samples:int, interv:int, n_frec_div:int, class_mapping:dict):
+    '''Builds energy arrays for each train signal 
+    (x=window samples, y=frecuency divisions z=signal)'''
+    array_length = (n_samples // interv) - 1
+    N = len(dataset)
+    
+    energy_dif_matrix = np.zeros((array_length, n_frec_div, N), dtype=np.float64)
+    sample_labels = np.zeros(array_length*N, np.int8)
+    for i, signal in tqdm(enumerate(dataset)):
+        energy_dif_matrix[:,:,i] = energy_arrays(signal_interval(signal["Data"], n_samples, interv), n_frec_div)
+        sample_labels[i*array_length:(i*array_length)+array_length] = class_mapping[signal["Class"]]
+        
+    return energy_dif_matrix, sample_labels
+    

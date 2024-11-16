@@ -2,10 +2,13 @@ import numpy as np
 import random
 
 from tqdm import tqdm
+from collections import Counter
 from utils_import import load_data
-from utils_preprocess import signal_interval, energy_arrays, split_data
-from utils_clustering import create_cluster
+from utils_preprocess import signal_interval, energy_arrays, split_data, compute_energy_matrix_and_labels
+from utils_clustering import create_cluster, cluster_mapping
 from sklearn.metrics import accuracy_score
+
+random.seed(1337)
 
 # Asumption: all signals consist of 50k samples
 n_samples = 50000
@@ -41,26 +44,27 @@ print(f"Nº señales test: {N_test}")
 random.shuffle(train)
 random.shuffle(test)
 
+class_mapping = {"Clean": 0, "Narrowband": 1, "Wideband": 2}
+
+# 1) -- Train --
+
 # Building energy arrays for each train signal (x=window samples, y=frecuency divisions z=signal)
-train_energy_dif_matrix = np.zeros((array_length, n_frec_div, N_train), dtype=np.float64)
-for i, signal in tqdm(enumerate(train)):
-    train_energy_dif_matrix[:,:,i] = energy_arrays(signal_interval(signal["Data"], n_samples, interv), n_frec_div)
-    
-# Testing K-Means model based on energy arrays
+train_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(train, n_samples, interv, n_frec_div, class_mapping)
+
+# Creating K-Means model based on energy arrays
 cluster = create_cluster(train_energy_dif_matrix, k=3)
+print(f"\n--- Centros de cluster ---\n{cluster.cluster_centers_}") 
+
+# Mapping cluster to original classes
+cluster_map = cluster_mapping(cluster.labels_, sample_labels, class_mapping)
+print(f"\nMapping clusters to predominant classes: {cluster_map}")
+
+# 2) -- Test -- ToDo
+
+test_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(test, n_samples, interv, n_frec_div, class_mapping)
+
 '''
-test_energy_dif_matrix = np.zeros((array_length, n_frec_div, N_test), dtype=np.float64)
-for i, signal in tqdm(enumerate(test)):
-    test_energy_dif_matrix[:,:,i] = energy_arrays(signal_interval(signal["data"], n_samples, interv), n_frec_div)
-
-# Dictionary in order to map class-cluster_val. This is an ASUMPTION -->  Review when cluster results available
-class_mapping = {
-    "Clean": 0,
-    "Narrowband": 1,
-    "Wideband": 2
-}
-
-y_true = [class_mapping[signal["class"]] for signal in test]
+#y_true = [class_mapping[signal["class"]] for signal in test]
 y_pred = cluster.predict(test_energy_dif_matrix)
 accuracy = accuracy_score(y_true, y_pred)
 
