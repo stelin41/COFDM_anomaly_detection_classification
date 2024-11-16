@@ -1,9 +1,11 @@
 import numpy as np
 import random
+from scipy.signal import welch
+from scipy.fft import fftshift
 
 from tqdm import tqdm
 
-def signal_interval(signal: np.complex64, n_samples=50000, interv=1024) -> np.array:
+def signal_interval(signal: np.complex64, n_samples=50000, interv=1024, Fs=12000000) -> np.array:
     '''
     Calcula la matriz donde hay 48 ventanas (filas)
     con 1024 muestras cada una (columnas)
@@ -14,9 +16,13 @@ def signal_interval(signal: np.complex64, n_samples=50000, interv=1024) -> np.ar
         start_idx = i * interv
         end_idx = (i + 1) * interv
         segment = signal[start_idx:end_idx]
-        
+
+        f, Pxx_spec = welch(segment, Fs, nperseg=interv, return_onesided=False, scaling="density")
+        Pxx_spec_dB = 10 * np.log10(Pxx_spec)
+        fft_matrix[i, :] = fftshift(Pxx_spec_dB)
+
         # FFT (frecuency domain transformation)
-        fft_matrix[i, :] = np.fft.fft(segment)
+        #fft_matrix[i, :] = np.fft.fft(segment)
         
     return fft_matrix
 
