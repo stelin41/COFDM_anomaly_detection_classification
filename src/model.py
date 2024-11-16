@@ -4,9 +4,10 @@ import random
 from tqdm import tqdm
 from collections import Counter
 from utils_import import load_data
-from utils_preprocess import signal_interval, energy_arrays, split_data, compute_energy_matrix_and_labels
+from utils_preprocess import split_data, compute_energy_matrix_and_labels
 from utils_clustering import create_cluster, cluster_mapping
-from sklearn.metrics import accuracy_score
+from utils_test import predict_labels
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
 random.seed(1337)
 
@@ -14,7 +15,7 @@ random.seed(1337)
 n_samples = 50000
 interv = 1024 # Hyperparameter 1
 array_length = (n_samples // interv) - 1
-n_frec_div = 20 # Hyperparameter 2
+n_frec_div = 8 # Hyperparameter 2
 
 # Load data
 signals_clean = load_data('../dataset/Jamming/Clean', '../dataset/Jamming/metadata.csv')
@@ -35,11 +36,8 @@ test.extend(clean_test)
 test.extend(narrowband_test) 
 test.extend(wideband_test) 
 
-N_train = len(train)
-N_test = len(test)
-
-print(f"Nº señales entrenamiento: {N_train}")
-print(f"Nº señales test: {N_test}")
+print(f"Nº señales entrenamiento: {len(train)}")
+print(f"Nº señales test: {len(test)}")
 
 random.shuffle(train)
 random.shuffle(test)
@@ -59,14 +57,36 @@ print(f"\n--- Centros de cluster ---\n{cluster.cluster_centers_}")
 cluster_map = cluster_mapping(cluster.labels_, sample_labels, class_mapping)
 print(f"\nMapping clusters to predominant classes: {cluster_map}")
 
-# 2) -- Test -- ToDo
+# 2) -- Test -- 
 
-test_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(test, n_samples, interv, n_frec_div, class_mapping)
+test_energy_dif_matrix, y_true = compute_energy_matrix_and_labels(test, n_samples, interv, n_frec_div, class_mapping)
 
-'''
-#y_true = [class_mapping[signal["class"]] for signal in test]
-y_pred = cluster.predict(test_energy_dif_matrix)
-accuracy = accuracy_score(y_true, y_pred)
+# Flattened energy matrix
+_, _ , n_signals = test_energy_dif_matrix.shape
+flattened_test_matrix = test_energy_dif_matrix.reshape(array_length*n_signals, n_frec_div)
 
-print(f"Accuracy of classification: {accuracy}")
-'''
+y_pred = [cluster_map[label] for label in cluster.predict(flattened_test_matrix)]
+# Nota: por el momento predice en exceso clase 1 (corregir desbalanceo, clase mayoritaria tiene muchas más ocurrencias)
+print(np.bincount(y_pred))
+
+# True signal classification
+signal_true = np.zeros(len(test), dtype=np.int8)
+for i, signal in enumerate(test):
+    signal_true[i] = class_mapping[signal["Class"]]
+
+# Predicted signal classification
+signal_pred = predict_labels(y_pred, N=len(test), array_length=array_length)
+
+# 3) -- Metrics --
+
+# Accuracy
+acc = accuracy_score(signal_true, signal_pred)
+print(f"\nAccuracy: {acc}")        
+
+# Confusion Matrix
+cm = confusion_matrix(signal_true, signal_pred)
+print(f"\nConfusion Matrix:\n{cm}")
+
+# Classification Report
+print(f"\nClassification Report:")
+print(classification_report(signal_true, signal_pred))
