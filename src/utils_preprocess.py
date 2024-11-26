@@ -103,6 +103,7 @@ def compute_energy_matrix_and_labels(dataset:list, n_samples:int, interv:int,
     and it may not last enougth to be noticeable.
     
     '''
+    assert offset > label_offset
     n_bad_data = offset if remove_middle else 0
     skip = 0 if remove_middle else label_offset
     array_length = (n_samples // interv) - offset - (n_bad_data*2)

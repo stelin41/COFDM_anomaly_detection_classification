@@ -1,8 +1,21 @@
+Installation:
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+Running demo:
+```bash
+source .env/bin/activate
+python3 demo.py
+```
+
 
 Assumptions:
 - We know how the signal looks like when it's clean (it starts clean)
 - The anomaly is additive/subtractive (increases/decreases the energy level)
 - The anomaly is at least `(1/n_frec_div)*sample_bandwith` wide
+
 
 Assumptions that can be compensated with better control mechanisms:
 - The anomaly lasts at least 5`nfft` (it can be reduced to one `nfft` or less)
