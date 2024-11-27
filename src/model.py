@@ -42,7 +42,7 @@ print(f"Nº señales test: {len(test)}")
 random.shuffle(train)
 random.shuffle(test)
 
-class_mapping = {"Clean": 0, "Narrowband": 1, "Wideband": 2}
+class_mapping = {"Clean": 0, "Narrowband Start": 1, "Narrowband Stop": 2, "Wideband Start": 3, "Wideband Stop": 4}
 
 # 1) -- Train --
 
@@ -50,7 +50,7 @@ class_mapping = {"Clean": 0, "Narrowband": 1, "Wideband": 2}
 train_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(train, n_samples, interv, n_frec_div, class_mapping)
 
 # Creating K-Means model based on energy arrays
-cluster = create_cluster(train_energy_dif_matrix, k=3)
+cluster = create_cluster(train_energy_dif_matrix, k=5)
 print(f"\n--- Centros de cluster ---\n{cluster.cluster_centers_}") 
 
 # Mapping cluster to original classes
@@ -65,6 +65,7 @@ y_pred = [cluster_map[label] for label in cluster.predict(test_energy_dif_matrix
 # Nota: por el momento predice en exceso clase 1 (corregir desbalanceo, clase mayoritaria tiene muchas más ocurrencias)
 print(np.bincount(y_pred))
 
+"""
 # True signal classification
 signal_true = np.zeros(len(test), dtype=np.int8)
 for i, signal in enumerate(test):
@@ -86,3 +87,4 @@ print(f"\nConfusion Matrix:\n{cm}")
 # Classification Report
 print(f"\nClassification Report:")
 print(classification_report(signal_true, signal_pred))
+"""

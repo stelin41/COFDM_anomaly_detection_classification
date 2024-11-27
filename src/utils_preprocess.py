@@ -44,11 +44,7 @@ def energy_arrays(fft_matrix: np.array, n_frec_div:int, offset=1) -> np.array:
         energies = np.sum(np.abs(fft_matrix[:,i*length_frec_div:(i+1)*length_frec_div])**2, axis=1)
         energy_dif[:,i] = np.log(energies[offset:]/energies[:-offset])
     
-    #energy_dif = np.abs(energy_dif)
-    #mins = np.min(energy_dif, axis=1)
-    #energy_dif = energy_dif-mins[...,None]
-    return np.abs(energy_dif)
-    #return energy_dif
+    return energy_dif
 
 def split_data(signal_list, train_ratio=0.8):
     '''
@@ -122,8 +118,8 @@ def compute_energy_matrix_and_labels(dataset:list, n_samples:int, interv:int,
             local_stop = (signal['JammingStartTime']+anomaly_duration)//interv - offset
             start = i*array_length + local_start + skip
             stop = i*array_length + local_stop + skip - n_bad_data
-            sample_labels[start] = class_mapping[signal["Class"]]
-            sample_labels[stop] = class_mapping[signal["Class"]]
+            sample_labels[start] = class_mapping[signal["Class"]+" Start"]
+            sample_labels[stop] = class_mapping[signal["Class"]+" Stop"]
 
             # removes the unused ranges (if remove_middle)
             energy_dif_matrix[array_length*i:array_length*(i+1),:] = np.concatenate(
