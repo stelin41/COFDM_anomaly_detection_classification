@@ -9,6 +9,9 @@ import numpy as np
 from scipy.fft import fftshift
 from scipy.signal import welch, spectrogram
 
+from src.rf_stream import Signal
+from src.utils_import import load_data
+
 #from src.utils_exploration import plot_PSD
 #from src.rf_stream import 
 
@@ -16,7 +19,7 @@ from scipy.signal import welch, spectrogram
 #SAMPLES_PER_FRAME = 10 
 SAMPLES_PER_FRAME = 100 #Number reads concatenated within a single window
 nfft = 1024 #NFFT value for spectrogram
-overlap = 1000 #overlap value for spectrogram
+overlap = 512 #overlap value for spectrogram
 #rate = mic_read.RATE #sampling rate
 
 
@@ -27,20 +30,25 @@ N = 2048 # number of samples to simulate
 rate = Fs
 
 freq = 50 # simulates sinusoid at 50 Hz
+amp = 1
 
-def get_sample():
+def get_sample(signal):
     """
     gets the audio data from the microphone
     inputs: audio stream and PyAudio object
     outputs: int16 array
     """
-    #data = mic_read.get_data(stream,pa)
+
     t = Ts*np.arange(N)
-    x = np.exp(1j*2*np.pi*freq*2*t)
-    n = (np.random.randn(N) + 1j*np.random.randn(N))/np.sqrt(2) # complex noise with unity power
-    noise_power = 2
-    data = x + n * np.sqrt(noise_power)
+    x = np.exp(1j*2*np.pi*freq*2*t)*amp
+
+    #n = (np.random.randn(N) + 1j*np.random.randn(N))/np.sqrt(2) # complex noise with unity power
+    #noise_power = 2
+    #data = x + n * np.sqrt(noise_power)
     #data = np.random.randint(0, 100, N, dtype=np.int16)
+
+    data = x*0.01 + signal.get_new_samples(N)
+    #data = signal.get_new_samples(N)
     return data
 
 def get_specgram(signal,rate):
@@ -50,7 +58,7 @@ def get_specgram(signal,rate):
     output: 2D Spectrogram Array, Frequency Array, Bin Array
     see matplotlib.mlab.specgram documentation for help
     """
-    arr2D,freqs,bins = specgram(signal,window=window_hanning,
+    arr2D,freqs,bins = specgram(10. * np.log10(signal),window=window_hanning,
                                 Fs = rate,NFFT=nfft,noverlap=overlap)
     return arr2D,freqs,bins
 
@@ -78,10 +86,8 @@ def main():
     
     plt.subplots_adjust(left=0.25, bottom=0.25)
     t = np.arange(0.0, 1.0, 0.001)
-    a0 = 5
-    f0 = 3
     delta_f = 5.0
-    s = a0 * np.sin(2 * np.pi * f0 * t)
+    s = amp * np.sin(2 * np.pi * freq * t)
     l, = ax4.plot(t, s, lw=2)
     ax4.axis([0, 1, -10, 10])
 
@@ -90,13 +96,13 @@ def main():
     axamp = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
 
     sfreq = Slider(axfreq, 'Freq', 0.1, 30.0, valinit=freq, valstep=delta_f)
-    samp = Slider(axamp, 'Amp', 0.1, 10.0, valinit=a0)
+    samp = Slider(axamp, 'Amp', 0.1, 5.0, valinit=amp)
 
 
     ###########
 
     def update(val):
-        global freq
+        global freq, amp
         amp = samp.val
         freq = sfreq.val
         l.set_ydata(amp*np.sin(2*np.pi*freq*t))
@@ -129,9 +135,14 @@ def main():
     """
     Launch the stream and the original spectrogram
     """
-    #dataset = load_dataset(r'dataset/Jamming_test/Clean')
-
-    data = get_sample()
+    dataset = load_data(r'dataset/Jamming/Clean', r'dataset/Jamming/metadata.csv')
+    # TODO: read a clean sample that wasn't used during train
+    for i in range(len(dataset)):
+        if dataset[i]['Class'] == 'Clean':
+            sample = dataset[0]["Data"]
+            break
+    signal = Signal(sample, nfft=nfft)
+    data = get_sample(signal)
     arr2D,freqs,bins = get_specgram(data,rate)
     """
     Setup the plot paramters
@@ -163,7 +174,7 @@ def main():
         inputs: iteration number
         outputs: updated image
         """
-        data = get_sample()
+        data = get_sample(signal)
         
         Pxx,freqs = calc_psd(data,rate)
 

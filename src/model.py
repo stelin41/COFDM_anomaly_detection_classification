@@ -3,10 +3,10 @@ import random
 
 from tqdm import tqdm
 from collections import Counter
-from utils_import import load_data
-from utils_preprocess import split_data, compute_energy_matrix_and_labels
-from utils_clustering import create_cluster, cluster_mapping
-from utils_test import predict_labels
+from .utils_import import load_data
+from .utils_preprocess import split_data, compute_energy_matrix_and_labels
+from .utils_clustering import create_cluster, cluster_mapping
+from .utils_test import predict_labels
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
 random.seed(1337)

@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 
 class RealtimeModel():
-    def __init__(self, model, classes= {"Clean": 0, 
+    def __init__(self, model, classes = {"Clean": 0, 
                             "Narrowband Start": 1, 
                             "Narrowband Stop": 2, 
                             "Wideband Start": 3, 
@@ -96,6 +96,7 @@ class RealtimeModel():
                     self.intervals_since_current_prediction = 0
                 self.possible_prediction = prediction 
 
+                # TODO: what if the end class is different from the start class?
                 if np.all(self.predictions[-self.n_confirmations:, 0] == self.predictions[-1, 0]):
                     self.prediction = prediction
                     self.intervals_since_last_prediction = self.intervals_since_current_prediction
@@ -120,12 +121,14 @@ class RealtimeModel():
                         )
             y = self.model.predict(energy_dif)
             shift = self.n_confirmations-1
-            if shift>0:
-                # Makes sure that the "not Clean" intervals are repeated at least twice.
-                # This makes the model more robust and it improves the accuracy
-                key = (y[:-shift]!=self.classes["Clean"]) & (y[shift:] == y[:-shift])
-            else:
-                key = y!=self.classes["Clean"]
+            key = y!=self.classes["Clean"]
+            
+            # Makes sure that the "not Clean" intervals are repeated at least "shift" times.
+            # This should make the model more robust and it improve the accuracy
+            for j in range(1,shift+1):
+                # each iteration "key" looses one interval
+                key = key[:-1] & (y[j:] == y[:-j]) 
+
             if np.any(key): # Not clean
                 unique, index = np.unique(y[key], return_index=True)
 
@@ -139,17 +142,20 @@ class RealtimeModel():
                 # assume the signal is clean.
                 # WARNING: The real time model may behave differently because it may not classify the signal as clean.
                 if self.class_map[prediction] != self.class_map[end_prediction] or len(unique)!=2:
-                    prediction = self.class_map[self.classes["Clean"]]
+                    prediction = self.class_map[self.classes["Clean"]] # TODO: maybe we should classify it as unkown anomaly
                     start, end = None, None
                 else:
                     # considers the first interval classified to such prediction as the start
                     # and the last interval classified to such prediction end as the end
-                    if shift>0:
-                        start = ((y[:-shift]==prediction) & (y[shift:] == y[:-shift])).argmax()
-                        end = ((y[:-shift]==prediction) & (y[shift:] == y[:-shift])).argmax()
-                    else:
-                        start = (y==prediction).argmax()
-                        end = (y==prediction).argmax()
+                    start = y==prediction
+                    end = y==end_prediction
+                    for j in range(1,shift+1):
+                        # each iteration "start" and "end" looses one interval
+                        repeated = (y[j:] == y[:-j])
+                        start = start[:-1] & repeated
+                        end = end[:-1] & repeated
+                    start = start.argmax()
+                    end = end.argmax()
 
                 #unique, index, counts = np.unique(y, return_index=True, return_counts=True)
 
@@ -157,6 +163,8 @@ class RealtimeModel():
 
             else: # Clean signal
                 prediction[i] = {"Class":self.classes["Clean"], "Start":None, "Stop":None}
+
+        return prediction
             
 
         
