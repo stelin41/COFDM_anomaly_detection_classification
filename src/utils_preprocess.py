@@ -75,7 +75,7 @@ def balance(X:np.array, y:np.array, random_state=1337):
 def compute_energy_matrix_and_labels(dataset:list, n_samples:int, interv:int, 
                                      n_frec_div:int, class_mapping:dict, 
                                      anomaly_duration = 12500, offset = 2, 
-                                     label_offset = 1, remove_middle = True):
+                                     label_offset = 1, remove_middle = True, balance_data=True, SEED=1337):
     '''
     Builds energy arrays for each train signal 
     (x=window samples, y=frecuency divisions z=signal)
@@ -131,7 +131,8 @@ def compute_energy_matrix_and_labels(dataset:list, n_samples:int, interv:int,
             # The last intervals are cut (if remove_middle) to fit in the energy dif matrix,
             # it is not needed but it simplifies the code
             energy_dif_matrix[array_length*i:array_length*(i+1),:] = energy_dif[:array_length,:]
-    energy_dif_matrix, sample_labels = balance(energy_dif_matrix, sample_labels)
+    if balance_data:
+        energy_dif_matrix, sample_labels = balance(energy_dif_matrix, sample_labels, random_state=SEED)
     return energy_dif_matrix, sample_labels
 
 

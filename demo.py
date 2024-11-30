@@ -4,13 +4,14 @@ from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.mlab import window_hanning,specgram,psd
 import matplotlib.animation as animation
 from matplotlib.colors import LogNorm
-import numpy as np
+import random
 
 from scipy.fft import fftshift
 from scipy.signal import welch, spectrogram
 
 from src.rf_stream import Signal
 from src.utils_import import load_data
+from src.utils_preprocess import split_data
 
 #from src.utils_exploration import plot_PSD
 #from src.rf_stream import 
@@ -78,8 +79,41 @@ def calc_psd2(signal,rate):
                                 Fs = rate,NFFT=nfft,noverlap=overlap)
     return Pxx,freqs
 
+def get_data_and_model(): # TODO
+    # Asumption: all signals consist of 50k samples
+    n_samples = 50000
+    interv = 1024 # Hyperparameter 1
+    array_length = (n_samples // interv) - 1
+    n_frec_div = 32 # Hyperparameter 2
 
-def main():
+    # Load data
+    signals_clean = load_data('dataset/Jamming/Clean', 'dataset/Jamming/metadata.csv')
+    #signals_narrowband = load_data('dataset/Jamming/Narrowband', 'dataset/Jamming/metadata.csv')
+    #signals_wideband = load_data('dataset/Jamming/Wideband', 'dataset/Jamming/metadata.csv')
+
+    # Partition train=0.8, test=0.2
+    clean_train, clean_test = split_data(signals_clean, 0.8)
+    #narrowband_train, narrowband_test = split_data(signals_narrowband, 0.8)
+    #wideband_train, wideband_test = split_data(signals_wideband, 0.8)
+
+    #train = clean_train + narrowband_train + wideband_train
+    #test = clean_test + narrowband_test + wideband_test
+
+    #random.shuffle(train)
+    #random.shuffle(test)
+
+    #train_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(train, n_samples, interv, n_frec_div, class_mapping)
+
+    sample = clean_test[0]["Data"]
+
+    return sample
+
+def main(SEED=1337):
+    random.seed(SEED)
+    np.random.seed(SEED)
+
+    sample = get_data_and_model()
+
     #fig = plt.figure()
 
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2)
@@ -135,12 +169,6 @@ def main():
     """
     Launch the stream and the original spectrogram
     """
-    dataset = load_data(r'dataset/Jamming/Clean', r'dataset/Jamming/metadata.csv')
-    # TODO: read a clean sample that wasn't used during train
-    for i in range(len(dataset)):
-        if dataset[i]['Class'] == 'Clean':
-            sample = dataset[0]["Data"]
-            break
     signal = Signal(sample, nfft=nfft)
     data = get_sample(signal)
     arr2D,freqs,bins = get_specgram(data,rate)
