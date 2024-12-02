@@ -13,6 +13,8 @@ from src.rf_stream import Signal
 from src.utils_import import load_data
 from src.utils_preprocess import split_data
 
+from PIL import Image
+
 #from src.utils_exploration import plot_PSD
 #from src.rf_stream import 
 
@@ -194,6 +196,17 @@ def main(SEED=1337):
     ax3.set_title("PSD")
     ax3.grid(True)
 
+    ax2.axis('off')
+
+    img = Image.open('mica.jpg')
+    rgb = img.convert('RGB')
+    img_rgb = np.array(rgb)
+
+    ruido = np.random.normal(0,amp*10,(img_rgb.shape[0],img_rgb.shape[1],3))
+    im_gaus = img_rgb + np.array(ruido)
+    im_gaus = np.clip(im_gaus, 0, 255).astype(np.uint8)
+    im_anom = ax2.imshow(im_gaus, aspect = 'auto')
+
     def update_fig(n):
         """
         updates the image, just adds on samples at the start until the maximum size is
@@ -219,7 +232,13 @@ def main(SEED=1337):
             im_data = np.delete(im_data,np.s_[:-keep_block],1)
             im_data = np.hstack((im_data,arr2D))
             im.set_array(im_data)
-        return im,
+            
+        ruido = np.random.normal(0,amp*10,(img_rgb.shape[0],img_rgb.shape[1],3))
+        im_gaus = img_rgb + np.array(ruido)
+        im_gaus = np.clip(im_gaus, 0, 255).astype(np.uint8)
+        im_anom.set_array(im_gaus)
+
+        return im
 
     ############### Animate ###############
     anim = animation.FuncAnimation(fig,update_fig,blit = False,
