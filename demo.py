@@ -197,8 +197,8 @@ def main(SEED=1337):
     ax3.grid(True)
 
     ax2.axis('off')
-
-    img = Image.open('mica.jpg')
+    
+    img = Image.open('neko.jpg')
     rgb = img.convert('RGB')
     img_rgb = np.array(rgb)
 
