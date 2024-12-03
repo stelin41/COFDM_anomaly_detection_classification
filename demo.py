@@ -25,20 +25,17 @@ from PIL import Image
 
 
 #SAMPLES_PER_FRAME = 10 
-SAMPLES_PER_FRAME = 100 #Number reads concatenated within a single window
-nfft = 1024 #NFFT value for spectrogram
-overlap = 512 #overlap value for spectrogram
-#rate = mic_read.RATE #sampling rate
+SAMPLES_PER_FRAME = 64 # No. reads concatenated within a single window
+nfft = 1024 # NFFT value for spectrogram
+overlap = 512 # overlap value for spectrogram
 
-
-Fs = 300 # sample rate
+Fs = 12e6 # sample rate
 Fc = 0 # cutoff frequency
 Ts = 1/Fs # sample period
 N = 2048 # number of samples to simulate
-rate = Fs
 
-freq = 50 # simulates sinusoid at 50 Hz
-amp = 1
+var = 10
+amp = 3
 
 n_frec_div = 32
 n_samples = 50000
@@ -46,22 +43,10 @@ num_signal_intervals = n_samples//nfft
 
 def get_sample(signal):
     """
-    gets the audio data from the microphone
-    inputs: audio stream and PyAudio object
-    outputs: int16 array
+    inputs: signal stream
+    outputs: np.complex64 array
     """
-
-    t = Ts*np.arange(N)
-    x = np.exp(1j*2*np.pi*freq*2*t)*amp
-
-    #n = (np.random.randn(N) + 1j*np.random.randn(N))/np.sqrt(2) # complex noise with unity power
-    #noise_power = 2
-    #data = x + n * np.sqrt(noise_power)
-    #data = np.random.randint(0, 100, N, dtype=np.int16)
-
-    data = x*0.01 + signal.get_new_samples(N)
-    #data = signal.get_new_samples(N)
-    return data
+    return signal.get_new_samples(N)
 
 def get_specgram(signal,rate):
     """
@@ -70,7 +55,7 @@ def get_specgram(signal,rate):
     output: 2D Spectrogram Array, Frequency Array, Bin Array
     see matplotlib.mlab.specgram documentation for help
     """
-    arr2D,freqs,bins = specgram(10. * np.log10(signal),window=window_hanning,
+    arr2D,freqs,bins = specgram(signal,window=window_hanning,
                                 Fs = rate,NFFT=nfft,noverlap=overlap)
     return arr2D,freqs,bins
 
@@ -81,7 +66,6 @@ def calc_psd(signal,rate):
     Pxx_spec_dB = fftshift(Pxx_spec_dB)
         
     return Pxx_spec_dB, (f + Fc) / 1e6
-
 
 # I think this is faster but it is not
 # in the correct scale
@@ -146,70 +130,68 @@ def main(SEED=1337):
 
     sample, pca, pca_data, kmeans = get_data_and_model()
 
-    #fig = plt.figure()
+    # Launch the signal stream
+    signal = Signal(sample, nfft=nfft)
 
-    fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(3,2, figsize=(10,8))
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(10,8))
     
     plt.subplots_adjust(left=0.25, bottom=0.25)
     t = np.arange(0.0, 1.0, 0.001)
-    delta_f = 5.0
-    s = amp * np.sin(2 * np.pi * freq * t)
-    l, = ax4.plot(t, s, lw=2)
-    ax4.axis([0, 1, -10, 10])
 
     axcolor = 'lightgoldenrodyellow'
-    axfreq = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+    axvar = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
     axamp = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
 
-    sfreq = Slider(axfreq, 'Freq', 0.1, 30.0, valinit=freq, valstep=delta_f)
-    samp = Slider(axamp, 'Amp', 0.1, 5.0, valinit=amp)
-
+    svar = Slider(axvar, 'Variability', 0, 15.0, valinit=var)
+    samp = Slider(axamp, 'Aplitude', 0, 15.0, valinit=amp)
 
     ###########
 
     def update(val):
-        global freq, amp
+        global amp, var
         amp = samp.val
-        freq = sfreq.val
-        l.set_ydata(amp*np.sin(2*np.pi*freq*t))
-        fig.canvas.draw_idle()
+        var = svar.val
+        signal.anomaly_intensity = amp
+        signal.anomaly_variability = var
 
-
-    sfreq.on_changed(update)
+    svar.on_changed(update)
     samp.on_changed(update)
+
+    rax = plt.axes([0.025, 0.5, 0.15, 0.15], facecolor=axcolor)
+    radio = RadioButtons(rax, ('Clean', 'Wideband', 'Narrowband'),
+                        label_props={'color': 'grb', 'fontsize': [12, 12, 12]},
+                        radio_props={'s': [64, 64, 64]}, active=0)
+
+    def noise_mode(mode):
+        signal.mode = mode
+    radio.on_clicked(noise_mode)
 
     resetax = plt.axes([0.8, 0.025, 0.1, 0.04])
     button = Button(resetax, 'Reset', color=axcolor, hovercolor='0.975')
 
 
     def reset(event):
-        sfreq.reset()
+        svar.reset()
         samp.reset()
+        radio.clear()
     button.on_clicked(reset)
 
-    rax = plt.axes([0.025, 0.5, 0.15, 0.15], facecolor=axcolor)
-    radio = RadioButtons(rax, ('red', 'blue', 'green'), active=0)
-
-
-    def colorfunc(label):
-        l.set_color(label)
-        fig.canvas.draw_idle()
-    radio.on_clicked(colorfunc)
     
     #########################
     
     """
-    Launch the stream and the original spectrogram
+    Launch the original spectrogram
     """
-    signal = Signal(sample, nfft=nfft)
     data = get_sample(signal)
-    arr2D,freqs,bins = get_specgram(data,rate)
+    arr2D,freqs,bins = get_specgram(data,Fs)
     """
     Setup the plot paramters
     """
+    
     extent = (bins[0],bins[-1]*SAMPLES_PER_FRAME,freqs[-1],freqs[0])
-    im = ax1.imshow(arr2D,aspect='auto',extent = extent,interpolation="none",
-                    cmap = 'jet',norm = LogNorm(vmin=.01,vmax=1))
+    im = ax1.imshow(arr2D,aspect='auto',extent = extent,interpolation="bilinear",
+                    cmap = 'jet',norm = LogNorm(vmin=10*arr2D.min(),vmax=1e-6))
+    #im = ax1.pcolormesh(arr2D, freqs, 10 * np.log10(bins), shading='auto', cmap='inferno')
     ax1.set_xlabel('Time (s)')
     ax1.set_ylabel('Frequency (Hz)')
     ax1.set_title('Real Time Spectogram')
@@ -217,13 +199,12 @@ def main(SEED=1337):
     fig.colorbar(im)
 
 
-    #_, _, psd = ax3.psd(data,window=window_hanning,
-    #                            Fs = rate,NFFT=nfft,noverlap=overlap, return_line=True)
-    Pxx,freqs = calc_psd(data,rate)
+    Pxx,freqs = calc_psd(data,Fs)
     psd_line, = ax3.plot(freqs,Pxx, '-')
     ax3.set_xlabel("Frequency [MHz]")
     ax3.set_ylabel("PSD [dB/Hz]")
     ax3.set_title("PSD")
+    ax3.set_ylim(top=-40)
     ax3.grid(True)
     
     ### 
@@ -232,25 +213,24 @@ def main(SEED=1337):
     pca_buffer = pd.DataFrame(columns=["PC1", "PC2", "cluster"])
     pca_buffer["PC1"], pca_buffer["PC2"], pca_buffer["cluster"] = pca_data["PC1"], pca_data["PC2"], pca_data["cluster"]
     scatter_alpha = np.linspace(1.0,0.1, num_signal_intervals)
-    scatter = ax5.scatter(
+    scatter = ax4.scatter(
         pca_data["PC1"], pca_data["PC2"],
         c=pca_data['cluster'], 
         alpha=scatter_alpha[:len(pca_buffer)]
     )
     
-    ax5.set_title('PCA')
-    ax5.set_xlabel('PC1')
-    ax5.set_ylabel('PC2')
-    ax5.set_xlim(-1,1)
-    ax5.set_ylim(-1,1)
-    ax5.grid(True)
+    ax4.set_title('PCA')
+    ax4.set_xlabel('PC1')
+    ax4.set_ylabel('PC2')
+    ax4.set_xlim(-1,1)
+    ax4.set_ylim(-1,1)
+    ax4.grid(True)
     
-    #legend1 = ax5.legend(*scatter.legend_elements(),
+    #legend1 = ax4.legend(*scatter.legend_elements(),
     #               loc="upper left", title="")
-    #ax5.add_artist(legend1)
+    #ax4.add_artist(legend1)
     
-    fig.subplots_adjust(left=0.25, bottom=0.25, right=0.95) 
-    fig.delaxes(ax6)
+    fig.subplots_adjust(left=0.25, bottom=0.25, right=0.95)
 
     ###
     
@@ -259,11 +239,7 @@ def main(SEED=1337):
     img = Image.open('neko.jpg')
     rgb = img.convert('RGB')
     img_rgb = np.array(rgb)
-
-    ruido = np.random.normal(0,amp*10,(img_rgb.shape[0],img_rgb.shape[1],3))
-    im_gaus = img_rgb + np.array(ruido)
-    im_gaus = np.clip(im_gaus, 0, 255).astype(np.uint8)
-    im_anom = ax2.imshow(im_gaus, aspect = 'auto')
+    im_anom = ax2.imshow(img_rgb, aspect = 'auto')
 
     def update_fig(n):
         """
@@ -277,7 +253,7 @@ def main(SEED=1337):
         
         data = get_sample(signal)
         
-        Pxx,freqs = calc_psd(data,rate)
+        Pxx,freqs = calc_psd(data,Fs)
         
         psd_line.set_data(freqs,Pxx)
         
@@ -292,7 +268,7 @@ def main(SEED=1337):
         scatter.set_array(pca_buffer["cluster"].to_numpy())
         ###
         
-        arr2D,freqs,bins = get_specgram(data,rate)
+        arr2D,freqs,bins = get_specgram(data,Fs)
         im_data = im.get_array()
         if n < SAMPLES_PER_FRAME:
             im_data = np.hstack((im_data,arr2D))
@@ -302,8 +278,16 @@ def main(SEED=1337):
             im_data = np.delete(im_data,np.s_[:-keep_block],1)
             im_data = np.hstack((im_data,arr2D))
             im.set_array(im_data)
+
+        im_noise = random.uniform(1, 1+var/2)
+        if signal.mode.lower() == "wideband":
+            im_noise = (im_noise+amp)*10
+        elif signal.mode.lower() == "narrowband":
+            im_noise = (im_noise+amp)*2
+        else:
+            im_noise = 0
             
-        ruido = np.random.normal(0,amp*10,(img_rgb.shape[0],img_rgb.shape[1],3))
+        ruido = np.random.normal(0,im_noise,(img_rgb.shape[0],img_rgb.shape[1],3))
         im_gaus = img_rgb + np.array(ruido)
         im_gaus = np.clip(im_gaus, 0, 255).astype(np.uint8)
         im_anom.set_array(im_gaus)
