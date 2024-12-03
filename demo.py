@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.mlab import window_hanning,specgram,psd
@@ -17,14 +18,9 @@ from src.utils_preprocess import split_data
 
 from sklearn.decomposition import PCA
 from src.utils_preprocess import signal_interval, energy_arrays, compute_energy_matrix_and_labels
-from src.utils_clustering import create_cluster
-from PIL import Image
-
-#from src.utils_exploration import plot_PSD
-#from src.rf_stream import 
+from src.model_rt import RealtimeModel, svc
 
 
-#SAMPLES_PER_FRAME = 10 
 SAMPLES_PER_FRAME = 64 # No. reads concatenated within a single window
 nfft = 1024 # NFFT value for spectrogram
 overlap = 512 # overlap value for spectrogram
@@ -34,8 +30,8 @@ Fc = 0 # cutoff frequency
 Ts = 1/Fs # sample period
 N = 2048 # number of samples to simulate
 
-var = 10
-amp = 3
+var = 0
+amp = 10
 
 n_frec_div = 32
 n_samples = 50000
@@ -64,7 +60,7 @@ def calc_psd(signal,rate):
     Pxx_spec_dB = 10 * np.log10(Pxx_spec)
     f = fftshift(f)
     Pxx_spec_dB = fftshift(Pxx_spec_dB)
-        
+    
     return Pxx_spec_dB, (f + Fc) / 1e6
 
 # I think this is faster but it is not
@@ -74,10 +70,10 @@ def calc_psd2(signal,rate):
                                 Fs = rate,NFFT=nfft,noverlap=overlap)
     return Pxx,freqs
 
-def calc_pca_points(data,nfft,pca,kmeans):
+def calc_pca_points(data,nfft,pca,model):
     energy_dif = energy_arrays(signal_interval(data, N, nfft), n_frec_div, offset=1)
     new_pca_points = pca.transform(energy_dif[-1:])
-    predicted_cluster = kmeans.predict(energy_dif)
+    predicted_cluster = model.predict(energy_dif)
     return pd.DataFrame({"PC1": new_pca_points[:, 0], "PC2": new_pca_points[:, 1], "cluster": predicted_cluster})
 
 def get_data_and_model(): # TODO
@@ -99,51 +95,53 @@ def get_data_and_model(): # TODO
     narrowband_train, narrowband_test = split_data(signals_narrowband, 0.8)
     wideband_train, wideband_test = split_data(signals_wideband, 0.8)
 
-    #train = clean_train + narrowband_train + wideband_train
-    test = clean_test + narrowband_test + wideband_test
+    train = clean_train + narrowband_train + wideband_train
+    random.shuffle(train)
+    train_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(train, n_samples, interv, n_frec_div, class_mapping)
 
-    #random.shuffle(train)
-    random.shuffle(test)
-
-    #train_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(train, n_samples, interv, n_frec_div, class_mapping)
-    test_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(test, n_samples, interv, n_frec_div, class_mapping)
+    #test = clean_test + narrowband_test + wideband_test
+    #random.shuffle(test)
+    #test_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(test, n_samples, interv, n_frec_div, class_mapping)
 
     sample = clean_test[0]["Data"]
     
     ###
-    # PCA MODEL for visualization with KMEANS support for model prediction
+    # PCA MODEL for visualization with SVM support for model prediction
     pca = PCA(n_components=2)
-    pca.fit(test_energy_dif_matrix)
-    kmeans = create_cluster(test_energy_dif_matrix)
+    pca.fit(train_energy_dif_matrix)
+    svm = svc(train_energy_dif_matrix, sample_labels)
     
     sample_signal = clean_test[0]
     sample_train = energy_arrays(signal_interval(sample, N, nfft), n_frec_div, offset=1)
     pca_data = pd.DataFrame(pca.transform(sample_train),columns=['PC1','PC2']) 
-    pca_data['cluster'] = pd.Categorical(kmeans.predict(sample_train))
-    ###
+    pca_data['cluster'] = pd.Categorical(svm.predict(sample_train))
 
-    return sample, pca, pca_data, kmeans
+    return sample, pca, pca_data, svm
 
 def main(SEED=1337):
     random.seed(SEED)
     np.random.seed(SEED)
 
-    sample, pca, pca_data, kmeans = get_data_and_model()
-
-    # Launch the signal stream
-    signal = Signal(sample, nfft=nfft)
+    sample, pca, pca_data, model = get_data_and_model()
+    rt_model = RealtimeModel(model, nfft=nfft, n_partitions=n_frec_div)
+    signal = Signal(sample, nfft=nfft, smoothing_steps=len(sample), FS=Fs,
+                    anomaly_intensity=amp, anomaly_variability = var) # signal data stream
 
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(10,8))
     
     plt.subplots_adjust(left=0.25, bottom=0.25)
-    t = np.arange(0.0, 1.0, 0.001)
 
-    axcolor = 'lightgoldenrodyellow'
-    axvar = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+    axcolor = 'lightgrey' #lightgoldenrodyellow
     axamp = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
+    axvar = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
 
+    samp = Slider(axamp, 'Aplitude', -4.0, 16.0, valinit=amp)
     svar = Slider(axvar, 'Variability', 0, 15.0, valinit=var)
-    samp = Slider(axamp, 'Aplitude', 0, 15.0, valinit=amp)
+
+    axpred = plt.axes([0.1, 0.45, 0.15, 0.15], facecolor=axcolor)
+    axpred.axis('off')
+    tpred = axpred.text(0,0,"Prediction:\nUnknown", horizontalalignment='center',
+                        verticalalignment='center', bbox={'facecolor': 'green', 'alpha': 0.1, 'pad': 10})
 
     ###########
 
@@ -173,7 +171,10 @@ def main(SEED=1337):
     def reset(event):
         svar.reset()
         samp.reset()
+        rt_model.reset()
         radio.clear()
+        tpred.set_text("Prediction:\nUnknown")
+        tpred.set_backgroundcolor("green")
     button.on_clicked(reset)
 
     
@@ -252,6 +253,14 @@ def main(SEED=1337):
         global pca_buffer
         
         data = get_sample(signal)
+
+        pred, s_start = rt_model.get_current_prediction(data)
+        tpred.set_text("Prediction:\n"+pred)
+        if signal.mode == pred:
+            tpred.set_backgroundcolor("green")
+        else:
+            tpred.set_backgroundcolor("red")
+        #print(rt_model.predictions, rt_model.prediction)
         
         Pxx,freqs = calc_psd(data,Fs)
         
@@ -259,7 +268,7 @@ def main(SEED=1337):
         
         ###
         # PCA update 
-        new_pca_points = calc_pca_points(data, nfft, pca, kmeans)
+        new_pca_points = calc_pca_points(data, nfft, pca, model)
         pca_buffer = pd.concat([new_pca_points, pca_buffer], ignore_index=True)
         if len(pca_buffer) > num_signal_intervals:
             pca_buffer = pca_buffer.iloc[:num_signal_intervals]
@@ -287,7 +296,7 @@ def main(SEED=1337):
         else:
             im_noise = 0
             
-        ruido = np.random.normal(0,im_noise,(img_rgb.shape[0],img_rgb.shape[1],3))
+        ruido = np.random.normal(0,max(im_noise,0),(img_rgb.shape[0],img_rgb.shape[1],3))
         im_gaus = img_rgb + np.array(ruido)
         im_gaus = np.clip(im_gaus, 0, 255).astype(np.uint8)
         im_anom.set_array(im_gaus)
@@ -296,7 +305,7 @@ def main(SEED=1337):
 
     ############### Animate ###############
     anim = animation.FuncAnimation(fig,update_fig,blit = False,
-                                interval=1)
+                                interval=40)
     
     try:
         plt.show()

@@ -4,15 +4,15 @@ import numpy as np
 import random
 
 class Signal():
-    def __init__(self, clean_signal, nfft=1024, smoothing_steps=1024*16, FS = 12e6, mode = "Clean"):
+    def __init__(self, clean_signal, nfft=1024, smoothing_steps=1024, FS = 1, 
+                 mode = "Clean", anomaly_intensity=3, anomaly_variability=10):
         """
         FS: sample rate in Hz
 
         """
         
-        self.anomaly_intensity = 3
-        self.anomaly_variability = 10
-        self.anomaly_width = 0 # 0-1
+        self.anomaly_intensity = anomaly_intensity
+        self.anomaly_variability = anomaly_variability
         self.mode = mode
 
         self.nfft = nfft

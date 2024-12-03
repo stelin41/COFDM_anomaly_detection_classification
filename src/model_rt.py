@@ -1,4 +1,4 @@
-from utils_preprocess import energy_arrays, signal_interval
+from .utils_preprocess import energy_arrays, signal_interval
 import numpy as np
 from tqdm import tqdm
 from sklearn import svm
@@ -63,9 +63,9 @@ class RealtimeModel():
         self.buffer_index = 0
         self.ready = False
         self.offset = offset
-        self.fd_buffer = np.empty((nfft, offset, n_shifts), dtype=np.float64)
+        self.fd_buffer = np.empty((offset, n_partitions, n_shifts), dtype=np.float64)
         self.n_shifts = n_shifts
-        self.predictions = np.empty((nfft, n_shifts), dtype=np.int16)
+        self.predictions = np.empty((offset, n_shifts), dtype=np.int16)
         self.classes = classes
         self.class_map = class_map
         self.class_type = class_type
@@ -84,54 +84,58 @@ class RealtimeModel():
 
     def get_current_prediction(self, X:np.array):
         """
-        Takes nfft new samples
+        Takes new np.array[np.complex64] samples
 
         returns the prediction and the number of samples it passed since that prediction helds true
         """
 
-        # All the buffers are circular buffers
+        assert len(X)%self.nfft == 0, "The number of samples must be a multiple of nfft."
 
-        self.intervals_since_last_prediction += 1
-        self.intervals_since_current_prediction += 1
+        for j in range(len(X)//self.nfft):
+            # All the buffers are circular buffers
 
-        if self.buffer_index == (self.num_intervals-1):
-            self.ready = True
+            self.intervals_since_last_prediction += 1
+            self.intervals_since_current_prediction += 1
 
-        start = self.buffer_index*self.nfft
-        end = (self.buffer_index+1)*self.nfft
-        self.buffer[start:end] = X
+            if self.buffer_index == (self.num_intervals-1):
+                self.ready = True
 
-        if self.ready:
-            for i in range(self.n_shifts): # Note: it can be optimized
-                shift = i*(self.nfft//self.n_shifts)
-                self.fd_buffer[:, :, i] = energy_arrays(
-                                            signal_interval(
-                                                    np.concatenate(
-                                                            (self.buffer[((end+shift)%self.buffer.shape[0]):],
-                                                            self.buffer[:1+((end+shift)%self.buffer.shape[0])])
-                                                        ), 
-                                                    self.buffer.shape[0],
-                                                    self.nfft
-                                                ), 
-                                            self.n_partitions, 
-                                            offset=self.offset
-                                        )
-                self.predictions[:, i] = self.model.predict(self.fd_buffer[:, :, i])
+            start = self.buffer_index*self.nfft
+            end = (self.buffer_index+1)*self.nfft
+            self.buffer[start:end] = X[j*self.nfft:(j+1)*self.nfft]
 
-            # The current implementation only considers the first shift
-            prediction = self.predictions[-1, 0]
+            if self.ready:
+                for i in range(self.n_shifts): # Note: it can be optimized
+                    shift = i*(self.nfft//self.n_shifts)
+                    self.fd_buffer[:, :, i] = energy_arrays(
+                                                signal_interval(
+                                                        np.concatenate(
+                                                                (self.buffer[((end+shift)%self.buffer.shape[0]):],
+                                                                self.buffer[:1+((end+shift)%self.buffer.shape[0])])
+                                                            ), 
+                                                        self.buffer.shape[0],
+                                                        self.nfft
+                                                    ), 
+                                                self.n_partitions, 
+                                                offset=self.offset
+                                            )
+                    self.predictions[:, i] = self.model.predict(self.fd_buffer[:, :, i])
 
-            if prediction != self.classes["Clean"]:
-                if self.possible_prediction != prediction:
-                    self.intervals_since_current_prediction = 0
-                self.possible_prediction = prediction 
+                # The current implementation only considers the first shift
+                prediction = self.predictions[-1, 0]
 
-                # TODO: what if the end class is different from the start class?
-                if np.all(self.predictions[-self.n_confirmations:, 0] == self.predictions[-1, 0]):
-                    self.prediction = prediction
-                    self.intervals_since_last_prediction = self.intervals_since_current_prediction
-            
-        self.buffer_index = (self.buffer_index+1) % self.num_intervals
+                if prediction != self.classes["Clean"]:
+                    if self.possible_prediction != prediction:
+                        self.intervals_since_current_prediction = 0
+                    self.possible_prediction = prediction 
+
+                    # TODO: what if the end class is different from the start class?
+                    if self.class_map[self.prediction] == "Clean" or self.class_type[prediction] == self.class_type[self.prediction]:
+                        if np.all(self.predictions[-self.n_confirmations:, 0] == self.predictions[-1, 0]):
+                            self.prediction = prediction
+                            self.intervals_since_last_prediction = self.intervals_since_current_prediction
+                
+            self.buffer_index = (self.buffer_index+1) % self.num_intervals
 
         return self.class_map[self.prediction], self.intervals_since_last_prediction*self.nfft
 
@@ -139,7 +143,7 @@ class RealtimeModel():
         """
         Takes a list of np.array[np.complex64] rf recordings,
         classificates each one and predicts near which sample
-        the anomaly started.
+        the anomaly started. It has less overhead than RealtimeModel.get_current_prediction(X)
         """
 
         prediction = [None]*len(recordings)
