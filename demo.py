@@ -134,9 +134,9 @@ def main(SEED=1337):
     axcolor = 'lightgrey' #lightgoldenrodyellow
     axamp = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
     axvar = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
-
-    samp = Slider(axamp, 'Aplitude', -4.0, 16.0, valinit=amp)
-    svar = Slider(axvar, 'Variability', 0, 15.0, valinit=var)
+    
+    samp = Slider(axamp, 'Amplitude', -4.0, 16.0, valinit=amp)
+    svar = Slider(axvar, 'Variability', 0, 8.0, valinit=var)
 
     axpred = plt.axes([0.1, 0.45, 0.15, 0.15], facecolor=axcolor)
     axpred.axis('off')
@@ -288,7 +288,7 @@ def main(SEED=1337):
             im_data = np.hstack((im_data,arr2D))
             im.set_array(im_data)
 
-        im_noise = random.uniform(1, 1+var/2)
+        im_noise = random.uniform(1, 1+var)
         if signal.mode.lower() == "wideband":
             im_noise = (im_noise+amp)*10
         elif signal.mode.lower() == "narrowband":
