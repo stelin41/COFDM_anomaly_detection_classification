@@ -3,5 +3,6 @@ dataset/Jamming.zip
 .DS_Store
 .env
 src/__pycache__/
+__pycache__/
 venv/
 experiments
