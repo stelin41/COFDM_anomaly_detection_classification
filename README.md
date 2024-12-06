@@ -1,5 +1,5 @@
 
-![running demo](demo.gif)
+[![running demo](demo.gif)](https://www.youtube.com/watch?v=HhnafOJapxQ)
 
 Installation:
 ```bash
