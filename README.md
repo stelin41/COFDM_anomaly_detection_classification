@@ -1,3 +1,6 @@
+
+![running demo](demo.gif)
+
 Installation:
 ```bash
 chmod +x install.sh

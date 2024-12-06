@@ -41,11 +41,11 @@ num_signal_intervals = n_samples//nfft
 n_shifts = 1
 
 class_colors = {
-    0: 'blue',    
-    1: 'red',   
-    2: 'red',     
-    3: 'purple',
-    4: 'purple'   
+    0: 'green',
+    1: 'blue',
+    2: 'blue',
+    3: 'red',
+    4: 'red'
 }
 
 def get_specgram(signal,rate):
