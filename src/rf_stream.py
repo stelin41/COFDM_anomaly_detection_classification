@@ -34,19 +34,13 @@ class Signal():
         )
         PSD_signal = 10 * np.log10(Pxx_spec)
         self.max_PSD = np.max(PSD_signal)
-
-        """
-        # Jamming parameters
-        jamming_samples = int(num_samples * jamming_duration_ratio)
-
-        jamming_signal = np.pad(
-            jamming_signal, (0, max(0, jamming_samples - len(jamming_signal)))
-        )[:jamming_samples]
-        """
     
     def generate_jamming(self, n, mode="Wideband"):
         """
+        n: number of samples to generate
         mode: "Narrowband" or "Wideband"
+
+        returns: np.array[np.complex64]
         """
         # Define ISR levels and create jamming signals
         if mode.lower() == "wideband":
@@ -86,7 +80,11 @@ class Signal():
         return output
     
     def get_new_samples(self, n):
-        assert n<=self.clean_signal.shape[0], "n larger than the signal"
+        """
+        Generate n new np.array[np.complex64] generated samples, 
+        including the anomaly if the current self.mode is not "Clean"
+        """
+        assert n<=self.clean_signal.shape[0], "n can't be larger than the signal"
         start = self.index
         self.index = (self.index+n)%self.clean_signal.shape[0]
         if self.index > start:

@@ -5,7 +5,4 @@ pandas
 scikit-learn
 imblearn
 pillow
-
 tqdm
-
-#future

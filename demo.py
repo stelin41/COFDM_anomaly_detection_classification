@@ -3,13 +3,13 @@ import pandas as pd
 from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons
-from matplotlib.mlab import window_hanning,specgram,psd
+from matplotlib.mlab import window_hanning,specgram
 import matplotlib.colors as mcolors
 import matplotlib.animation as animation
 from matplotlib.colors import LogNorm
 import matplotlib.lines as mlines
 import random
-
+from time import time
 
 from scipy.fft import fftshift
 from scipy.signal import welch, spectrogram
@@ -48,13 +48,6 @@ class_colors = {
     4: 'purple'   
 }
 
-def get_sample(signal):
-    """
-    inputs: signal stream
-    outputs: np.complex64 array
-    """
-    return signal.get_new_samples(N)
-
 def get_specgram(signal,rate):
     """
     takes the FFT to create a spectrogram of the given audio signal
@@ -74,13 +67,6 @@ def calc_psd(signal,rate):
     
     return Pxx_spec_dB, (f + Fc) / 1e6
 
-# I think this is faster but it is not
-# in the correct scale
-def calc_psd2(signal,rate):
-    Pxx,freqs = psd(signal,window=window_hanning,
-                                Fs = rate,NFFT=nfft,noverlap=overlap)
-    return Pxx,freqs
-
 def calc_pca_points(energy_dif,pca,predicted_vals):    
     new_pca_points = pca.transform(energy_dif)
     return pd.DataFrame({"PC1": new_pca_points[:,0], "PC2": new_pca_points[:,1], "class": predicted_vals})
@@ -88,12 +74,9 @@ def calc_pca_points(energy_dif,pca,predicted_vals):
 def get_class_color(class_val):
     return class_colors.get(class_val, 'gray')
 
-def get_data_and_model(): # TODO
-    # Asumption: all signals consist of 50k samples
-    n_samples = 50000
-    interv = 1024 # Hyperparameter 1
+def get_data_and_model(n_samples, interv, n_frec_div):
+    # Asumption: all signals consist of the same amount of samples
     array_length = (n_samples // interv) - 1
-    n_frec_div = 32 # Hyperparameter 2
     
     class_mapping = {"Clean": 0, "Narrowband Start": 1, "Narrowband Stop": 2, "Wideband Start": 3, "Wideband Stop": 4}
 
@@ -111,10 +94,6 @@ def get_data_and_model(): # TODO
     random.shuffle(train)
     train_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(train, n_samples, interv, n_frec_div, class_mapping)
 
-    #test = clean_test + narrowband_test + wideband_test
-    #random.shuffle(test)
-    #test_energy_dif_matrix, sample_labels = compute_energy_matrix_and_labels(test, n_samples, interv, n_frec_div, class_mapping)
-
     sample = clean_test[0]["Data"]
     
     ###
@@ -129,16 +108,16 @@ def main(SEED=1337):
     random.seed(SEED)
     np.random.seed(SEED)
 
-    sample, pca, model = get_data_and_model()
+    sample, pca, model = get_data_and_model(n_samples, nfft, n_frec_div)
     rt_model = RealtimeModel(model, nfft=nfft, n_partitions=n_frec_div)
     signal = Signal(sample, nfft=nfft, smoothing_steps=len(sample), FS=Fs,
                     anomaly_intensity=amp, anomaly_variability = var) # signal data stream
 
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2,2, figsize=(10,8))
     
-    plt.subplots_adjust(left=0.25, bottom=0.25)
+    plt.subplots_adjust(left=0.25, bottom=0.25, wspace=0.25, hspace=0.3)
 
-    axcolor = 'lightgrey' #lightgoldenrodyellow
+    axcolor = 'lightgrey'
     axamp = plt.axes([0.25, 0.15, 0.65, 0.03], facecolor=axcolor)
     axvar = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
     
@@ -190,16 +169,18 @@ def main(SEED=1337):
     """
     Launch the original spectrogram
     """
-    data = get_sample(signal)
+    data = signal.get_new_samples(N)
     arr2D,freqs,bins = get_specgram(data,Fs)
+
     """
     Setup the plot paramters
     """
     
     extent = (bins[0],bins[-1]*SAMPLES_PER_FRAME,freqs[-1],freqs[0])
+    vmin=10*arr2D.min()
+    vmax=1e-6
     im = ax1.imshow(arr2D,aspect='auto',extent = extent,interpolation="bilinear",
-                    cmap = 'jet',norm = LogNorm(vmin=10*arr2D.min(),vmax=1e-6))
-    #im = ax1.pcolormesh(arr2D, freqs, 10 * np.log10(bins), shading='auto', cmap='inferno')
+                    cmap = 'jet',norm = LogNorm(vmin=vmin,vmax=vmax))
     ax1.set_xlabel('Time (s)')
     ax1.set_ylabel('Frequency (Hz)')
     ax1.set_title('Real Time Spectogram')
@@ -235,13 +216,9 @@ def main(SEED=1337):
     ax4.set_title('PCA')
     ax4.set_xlabel('PC1')
     ax4.set_ylabel('PC2')
-    ax4.set_xlim(-1.7,1.7)
+    ax4.set_xlim(-2.2,2.2)
     ax4.set_ylim(-0.5,0.5)
     ax4.grid(True)
-    
-    #legend1 = ax4.legend(*scatter.legend_elements(),
-    #               loc="upper left", title="")
-    #ax4.add_artist(legend1)
     
     fig.subplots_adjust(left=0.25, bottom=0.25, right=0.95)
 
@@ -264,9 +241,11 @@ def main(SEED=1337):
         """
         global pca_buffer
         
-        data = get_sample(signal)
+        data = signal.get_new_samples(N)
 
+        #init = time()
         pred, s_start = rt_model.get_current_prediction(data)
+        #print(time()-init)
         
         tpred.set_text("Prediction:\n"+pred)
         if signal.mode == pred:
@@ -295,15 +274,24 @@ def main(SEED=1337):
         ###
         
         arr2D,freqs,bins = get_specgram(data,Fs)
+
         im_data = im.get_array()
+
+        #print(arr2D.shape, freqs.shape)
+
         if n < SAMPLES_PER_FRAME:
             im_data = np.hstack((im_data,arr2D))
-            im.set_array(im_data)
         else:
             keep_block = arr2D.shape[1]*(SAMPLES_PER_FRAME - 1)
             im_data = np.delete(im_data,np.s_[:-keep_block],1)
             im_data = np.hstack((im_data,arr2D))
-            im.set_array(im_data)
+
+        i_start = s_start//nfft
+        #print(i_start, arr2D.shape, data.shape)
+        if i_start < (N//nfft):
+            im_data[:, -i_start-1] = vmax
+
+        im.set_array(im_data)
 
         im_noise = random.uniform(1, 1+var)
         if signal.mode.lower() == "wideband":
@@ -329,10 +317,6 @@ def main(SEED=1337):
     except:
         print("Plot Closed")
 
-    ############### Terminate ###############
-    #stream.stop_stream()
-    #stream.close()
-    #pa.terminate()
     print("Program Terminated")
 
 if __name__ == "__main__":

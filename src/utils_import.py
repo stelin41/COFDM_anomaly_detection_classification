@@ -10,7 +10,7 @@ def cache_data(func):
         cache_key = str(args) + str(kwargs)
         
         if cache_key in cache:
-            print("Cargando datos desde cache...")
+            print("Loading data from cache...")
             return cache[cache_key]
         
         result = func(*args, **kwargs)
