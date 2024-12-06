@@ -4,10 +4,12 @@ from PIL import Image
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons
 from matplotlib.mlab import window_hanning,specgram,psd
+import matplotlib.colors as mcolors
 import matplotlib.animation as animation
 from matplotlib.colors import LogNorm
 import matplotlib.lines as mlines
 import random
+
 
 from scipy.fft import fftshift
 from scipy.signal import welch, spectrogram
@@ -36,6 +38,15 @@ amp = 10
 n_frec_div = 32
 n_samples = 50000
 num_signal_intervals = n_samples//nfft
+n_shifts = 1
+
+class_colors = {
+    0: 'blue',    
+    1: 'red',   
+    2: 'red',     
+    3: 'purple',
+    4: 'purple'   
+}
 
 def get_sample(signal):
     """
@@ -70,11 +81,12 @@ def calc_psd2(signal,rate):
                                 Fs = rate,NFFT=nfft,noverlap=overlap)
     return Pxx,freqs
 
-def calc_pca_points(data,nfft,pca,model):
-    energy_dif = energy_arrays(signal_interval(data, N, nfft), n_frec_div, offset=1)
-    new_pca_points = pca.transform(energy_dif[-1:])
-    predicted_cluster = model.predict(energy_dif)
-    return pd.DataFrame({"PC1": new_pca_points[:, 0], "PC2": new_pca_points[:, 1], "cluster": predicted_cluster})
+def calc_pca_points(energy_dif,pca,predicted_vals):    
+    new_pca_points = pca.transform(energy_dif)
+    return pd.DataFrame({"PC1": new_pca_points[:,0], "PC2": new_pca_points[:,1], "class": predicted_vals})
+
+def get_class_color(class_val):
+    return class_colors.get(class_val, 'gray')
 
 def get_data_and_model(): # TODO
     # Asumption: all signals consist of 50k samples
@@ -110,19 +122,14 @@ def get_data_and_model(): # TODO
     pca = PCA(n_components=2)
     pca.fit(train_energy_dif_matrix)
     svm = svc(train_energy_dif_matrix, sample_labels)
-    
-    sample_signal = clean_test[0]
-    sample_train = energy_arrays(signal_interval(sample, N, nfft), n_frec_div, offset=1)
-    pca_data = pd.DataFrame(pca.transform(sample_train),columns=['PC1','PC2']) 
-    pca_data['cluster'] = pd.Categorical(svm.predict(sample_train))
 
-    return sample, pca, pca_data, svm
+    return sample, pca, svm
 
 def main(SEED=1337):
     random.seed(SEED)
     np.random.seed(SEED)
 
-    sample, pca, pca_data, model = get_data_and_model()
+    sample, pca, model = get_data_and_model()
     rt_model = RealtimeModel(model, nfft=nfft, n_partitions=n_frec_div)
     signal = Signal(sample, nfft=nfft, smoothing_steps=len(sample), FS=Fs,
                     anomaly_intensity=amp, anomaly_variability = var) # signal data stream
@@ -211,20 +218,25 @@ def main(SEED=1337):
     ### 
     # PCA visualization
     global pca_buffer
-    pca_buffer = pd.DataFrame(columns=["PC1", "PC2", "cluster"])
-    pca_buffer["PC1"], pca_buffer["PC2"], pca_buffer["cluster"] = pca_data["PC1"], pca_data["PC2"], pca_data["cluster"]
-    scatter_alpha = np.linspace(1.0,0.1, num_signal_intervals)
+            
+    energy_dif = energy_arrays(signal_interval(data, N, nfft), n_frec_div, offset=1)
+    new_pca_points, predicted_vals = pca.transform(energy_dif), model.predict(energy_dif)
+    pca_buffer = pd.DataFrame({"PC1": new_pca_points[:, 0], "PC2": new_pca_points[:, 1], "class": predicted_vals})
+    pca_buffer['color'] = pca_buffer['class'].apply(get_class_color)
+    print(pca_buffer)
+
+    scatter_alpha = np.linspace(0.1,1.0, len(pca_buffer))
     scatter = ax4.scatter(
-        pca_data["PC1"], pca_data["PC2"],
-        c=pca_data['cluster'], 
-        alpha=scatter_alpha[:len(pca_buffer)]
+        pca_buffer["PC1"], pca_buffer["PC2"],
+        color=pca_buffer["color"],
+        alpha=scatter_alpha
     )
     
     ax4.set_title('PCA')
     ax4.set_xlabel('PC1')
     ax4.set_ylabel('PC2')
-    ax4.set_xlim(-1,1)
-    ax4.set_ylim(-1,1)
+    ax4.set_xlim(-1.7,1.7)
+    ax4.set_ylim(-0.5,0.5)
     ax4.grid(True)
     
     #legend1 = ax4.legend(*scatter.legend_elements(),
@@ -255,12 +267,12 @@ def main(SEED=1337):
         data = get_sample(signal)
 
         pred, s_start = rt_model.get_current_prediction(data)
+        
         tpred.set_text("Prediction:\n"+pred)
         if signal.mode == pred:
             tpred.set_backgroundcolor("green")
         else:
             tpred.set_backgroundcolor("red")
-        #print(rt_model.predictions, rt_model.prediction)
         
         Pxx,freqs = calc_psd(data,Fs)
         
@@ -268,13 +280,18 @@ def main(SEED=1337):
         
         ###
         # PCA update 
-        new_pca_points = calc_pca_points(data, nfft, pca, model)
-        pca_buffer = pd.concat([new_pca_points, pca_buffer], ignore_index=True)
-        if len(pca_buffer) > num_signal_intervals:
-            pca_buffer = pca_buffer.iloc[:num_signal_intervals]
-        scatter.set_offsets(pca_buffer[["PC1", "PC2"]].to_numpy())
-        scatter.set_alpha(scatter_alpha[:len(pca_buffer)])
-        scatter.set_array(pca_buffer["cluster"].to_numpy())
+        if rt_model.ready:
+            buffer = rt_model.fd_buffer[:,:,n_shifts-1]
+            predicted_vals = rt_model.predictions[:,n_shifts-1]
+            new_pca_points = calc_pca_points(buffer, pca, predicted_vals)
+            
+            pca_buffer = pd.concat([pca_buffer, new_pca_points], ignore_index=True)
+            pca_buffer['color'] = pca_buffer['class'].apply(get_class_color)
+            if len(pca_buffer) > num_signal_intervals:
+                pca_buffer = pca_buffer.iloc[-num_signal_intervals:]
+            scatter.set_offsets(pca_buffer[["PC1", "PC2"]].to_numpy())
+            scatter.set_alpha(scatter_alpha[:len(pca_buffer)])
+            scatter.set_facecolor(pca_buffer["color"].to_numpy())
         ###
         
         arr2D,freqs,bins = get_specgram(data,Fs)
