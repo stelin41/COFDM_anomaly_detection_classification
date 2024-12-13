@@ -13,16 +13,26 @@ source .env/bin/activate
 python3 demo.py
 ```
 
-
 Assumptions:
 - We know how the signal looks like when it's clean (it starts clean)
 - The anomaly is additive/subtractive (increases/decreases the energy level)
 - The anomaly is at least `(1/n_frec_div)*sample_bandwith` wide
 
 
-Assumptions that can be compensated with better control mechanisms:
+Assumptions that can be compensated or fixed with better control mechanisms:
 - The anomaly lasts at least 5`nfft` (it can be reduced to one `nfft` or less)
 - The anomaly starts/stops suddently (not gradually)
+- There can only be one simultaneous anomaly, and it can't change it's class
+
+As shown in [experiments.ipynb](experiments.ipynb), the model has a high accuracy under these conditions.
+```
+Accuracy: 0.9997777777777778
+
+Confusion Matrix:
+[[1500    0    0]
+ [   1 1499    0]
+ [   0    0 1500]]
+ ```
 
 The dataset is structured like:
 - `dataset/Jamming/Clean`
@@ -40,8 +50,22 @@ FileName,SignalType,JammingStartTime,AveragePower_dB
 ...
 ``` 
 
-The config file is located at `dataset/Jamming/config.csv`, and it should look like this:
+The config file is located at `dataset/Jamming/config.csv`, and it should look like this (although it is currently being ignored):
 ```
 SampleRate,CenterFrequency,NFFT
 12000000.0,498000000.0,1024
 ```
+
+
+## Credits
+
+Authors:
+- 
+- 
+- 
+
+Made in collaboration with University of Santiago de Compostela.
+
+Co-tutors:
+- Francisco Javier Valera Sánchez 
+- Anxo Tato Arias
