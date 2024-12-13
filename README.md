@@ -60,9 +60,9 @@ SampleRate,CenterFrequency,NFFT
 ## Credits
 
 Authors:
-- 
-- 
-- 
+- .
+- .
+- .
 
 Made in collaboration with University of Santiago de Compostela.
 
